@@ -6,15 +6,36 @@
 # To run these tests, simply execute `nimble test`.
 
 import unittest
-#import logging
-import octolog
+from logging import Level
+import octolog, os
 
 test "log test":
   start()
-  info("hello octolog!")
-  debug("hello octolog!")
-  warn("hello octolog!")
-  error("hello octolog!")
-  notice("hello octolog!")
-  fatal("hello octolog!")
+  info("hello octolog~")
+  info "hello octolog!"
+  debug "hello octolog!"
+  warn "hello octolog!"
+  error "hello octolog!"
+  notice "hello octolog!"
+  fatal "hello octolog!"
+  stop()
+  sleep(2000)
+
+
+test "log test all level":
+  var logLevel: seq[Level] = @[lvlInfo, lvlDebug, lvlError, lvlWarn, lvlFatal, lvlNotice]
+  start(fileName="octolog", fileloggerlvl=logLevel)
+  info "hello octolog!!"
+  debug "hello octolog!!"
+  error "hello octolog!!"
+  warn "hello octolog!!"
+  fatal "fatal fatal!!"
+  notice "notice here!!"
+  stop()
+  sleep(2000)
+
+
+test "disable filelogger":
+  start(usefilelogger=false)
+  info "hello world!!"
   stop()
