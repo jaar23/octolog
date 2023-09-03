@@ -32,7 +32,7 @@ A simple example on how to use library.
 import octolog, os
 
 # start octolog
-start()
+octologStart()
 
 info "hello octolog!"
 debug "hello octolog!"
@@ -42,7 +42,7 @@ notice "hello octolog!"
 fatal "hello octolog!"
 
 # stop octolog
-stop()
+octologStop()
 ```
 
 you are allow to use `info("some info")` or `info "some info"`.
@@ -68,13 +68,13 @@ octolog used std filelogger to do file logging, as octolog only running in singl
 import octolog
 
 var logLevel: seq[Level] = @[lvlInfo, lvlDebug, lvlError]
-start(fileName="octolog", fileloggerlvl=logLevel)
+octologStart(fileName="octolog", fileloggerlvl=logLevel)
 
 info "hello octolog!!"
 debug "hello octolog!!"
 error "hello octolog!!"
 
-stop()
+octologStop()
 ```
 
 the example above will write log into 3 different files, info.log. debug.log, and error.log.
@@ -90,17 +90,17 @@ More configuration on filelogger level, refer to the code example below:
 
 ```nim
 # default start
-start()
+octologStart()
 
 # start logging with log file name "octolog.log"
-start(fileName="octolog")
+octologStart(fileName="octolog")
 
 # start logging with log file name "octolog.log" but disable file logger, it will not write log into file
-start(fileName="octolog", usefilelogger=false)
+octologStart(fileName="octolog", usefilelogger=false)
 
 # start with log level defined and with log file name "octolog.info.log, octolog.xxx.log, ..."
 var logLevel: seq[Level] = @[lvlInfo, lvlDebug, lvlError, lvlWarn, lvlFatal, lvlNotice]
-start(fileName="octolog", fileloggerlvl=logLevel)
+octologStart(fileName="octolog", fileloggerlvl=logLevel)
 ```
 
 ### RollingFileLogger

@@ -197,9 +197,9 @@ proc collector() {.thread.} =
       log2File(line)
 
 
-proc start*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
+proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
     fileloggerlvl: seq[Level] = @[lvlAll]): void =
-  logChannel.open()
+  log_channel.open()
   threadId = getThreadId()
   var logfile = fileName.replace(".log", "")
   if usefileLogger:
@@ -231,7 +231,7 @@ proc start*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
   info("octolog started")
 
 
-proc stop*(): void =
+proc octologStop*(): void =
   # grace period before shutting down
   sleep(1000)
   withLock runningLock:
