@@ -102,3 +102,7 @@ start(fileName="octolog", usefilelogger=false)
 var logLevel: seq[Level] = @[lvlInfo, lvlDebug, lvlError, lvlWarn, lvlFatal, lvlNotice]
 start(fileName="octolog", fileloggerlvl=logLevel)
 ```
+
+### RollingFileLogger
+
+Work in progress...
