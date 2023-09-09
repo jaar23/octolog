@@ -1,6 +1,6 @@
 import colors, terminal, strutils, times
 import threadpool, locks, os
-from logging import Filelogger, Level, newFileLogger, substituteLog, log
+from logging import Filelogger, Level, newFileLogger, substituteLog, log, LevelNames
 
 
 var
@@ -88,17 +88,18 @@ proc disableFileLoggerLevel*(levelThreshold: Level) =
     enableFileLogger = false
 
 
-proc fmtLine(fmt: string = "[$datetime] [$levelname] $appname: ", level: Level,
+proc fmtLine(fmt: string = "[$datetime] [$levelname] $[$threadid] appname : ", level: Level,
     msgs: varargs[string, `$`]): string =
   let
     color = ansiForegroundColorCode(LogColors[level])
     cdef = ansiForegroundColorCode(fgDefault)
-    #lvlname = LevelNames[level]
-    #spaces = " ".repeat("NOTICE".len - lvlname.len)
-    spaces = ""
+    lvlname = LevelNames[level]
+    spaces = " ".repeat("NOTICE".len - lvlname.len)
+    #spaces = ""
     fmt = fmt.multiReplace(("$levelname", color & "$levelname" & cdef & spaces),
-        ("$levelid", color & "$levelid" & cdef))
-    line = substituteLog(fmt, level, msgs)
+        ("$levelid", color & "$levelid" & cdef), ("$threadid", $getThreadId()))
+  let line = substituteLog(fmt, level, msgs)
+
   return line
 
 
@@ -135,37 +136,37 @@ proc log2File(msg: string): void =
 
 
 
-proc log2Channel*(level: Level, msgs: varargs[string, `$`]) =
-  let line = fmtLine(level = level, msgs = msgs)
+proc log2Channel*(level: Level, msg: string) =
+  let line = LevelNames[level] & "|@|" & msg
   let sent = logChannel.trySend(line)
   if not sent:
-    logChannel.send(line)
+    echo "not sent"
 
 
-proc olog*(level: Level, msgs: varargs[string, `$`]) =
-  log2Channel(level, msgs)
+proc olog*(level: Level, msg: string) =
+  log2Channel(level, msg)
 
-proc info(msg: varargs[string, `$`]) =
+proc info(msg: string) =
   log2Channel(lvlInfo, msg)
 
 
-proc debug(msg: varargs[string, `$`]) =
+proc debug(msg: string) =
   log2Channel(lvlDebug, msg)
 
 
-proc notice(msg: varargs[string, `$`]) =
+proc notice(msg: string) =
   log2Channel(lvlNotice, msg)
 
 
-proc warn(msg: varargs[string, `$`]) =
+proc warn(msg: string) =
   log2Channel(lvlWarn, msg)
 
 
-proc error(msg: varargs[string, `$`]) =
+proc error(msg: string) =
   log2Channel(lvlError, msg)
 
 
-proc fatal(msg: varargs[string, `$`]) =
+proc fatal(msg: string) =
   log2Channel(lvlFatal, msg)
 
 
@@ -175,14 +176,35 @@ proc collector() {.thread.} =
     withLock runningLock:
       running = isRunning
     while running:
-      let (hasData, msg) = logChannel.tryRecv()
-      if hasData:
-        if useStderr:
-          stderr.writeLine msg
+      let data = logChannel.recv()
+      let tempMsg = data.split("|@|")
+      if tempMsg.len < 2:
+        raise newException(IOError, "log message unable to parse, |@| is a keyword")
+      let lvl = tempMsg[0]
+      let msg = tempMsg[1]
+      var level = lvlNone
+      case lvl:
+        of "INFO":
+          level = lvlInfo
+        of "DEBUG":
+          level = lvlDebug
+        of "WARN":
+          level = lvlWarn
+        of "ERROR":
+          level = lvlError
+        of "FATAL":
+          level = lvlFatal
+        of "NOTICE":
+          level = lvlNotice
         else:
-          stdout.writeLine msg
+          level = lvlNone
+      let line = fmtLine(level=level, msgs=msg)
+      if useStderr:
+        stderr.writeLine line
+      else:
+        stdout.writeLine line
         {.cast(gcsafe).}:
-          log2File(msg)
+          log2File(line)
       withLock runningLock:
         running = isRunning
   except:
@@ -242,21 +264,23 @@ proc octologStop*(): void =
   stdout.writeLine line
 
 
-template info*(msg: varargs[string, `$`]) =
+template info*(msg: string) =
   info(msg)
 
-template debug*(msg: varargs[string, `$`]) =
+
+template debug*(msg: string) =
   debug(msg)
 
-template warn*(msg: varargs[string, `$`]) =
+
+template warn*(msg: string) =
   warn(msg)
 
-template error*(msg: varargs[string, `$`]) =
+template error*(msg: string) =
   error(msg)
 
-template notice*(msg: varargs[string, `$`]) =
+template notice*(msg: string) =
   notice(msg)
 
-template fatal*(msg: varargs[string, `$`]) =
+template fatal*(msg: string) =
   fatal(msg)
 
