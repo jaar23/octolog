@@ -88,7 +88,7 @@ proc disableFileLoggerLevel*(levelThreshold: Level) =
     enableFileLogger = false
 
 
-proc fmtLine(fmt: string = "[$datetime] [$levelname] $[$threadid] appname : ", level: Level,
+proc fmtLine(fmt: string = "[$datetime] [$levelname] $[$threadid] $appname : ", level: Level,
     msgs: varargs[string, `$`]): string =
   let
     color = ansiForegroundColorCode(LogColors[level])
