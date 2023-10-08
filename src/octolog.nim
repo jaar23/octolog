@@ -7,6 +7,8 @@ var
   runningLock: Lock
   logChannel: Channel[string]
   useStderr: bool = false
+  printToConsole: bool = true
+  writeToLogfile: bool = true
   threadId: int
   isRunning {.guard: runningLock.}: bool = true
   infoFileLogger: FileLogger
@@ -199,10 +201,12 @@ proc collector() {.thread.} =
         else:
           level = lvlNone
       let line = fmtLine(level=level, msgs=msg)
-      if useStderr:
-        stderr.writeLine line
-      else:
-        stdout.writeLine line
+      if printToConsole:
+        if useStderr:
+          stderr.writeLine line
+        else:
+          stdout.writeLine line
+      if writeToLogfile:
         {.cast(gcsafe).}:
           log2File(line)
       withLock runningLock:
@@ -220,10 +224,14 @@ proc collector() {.thread.} =
 
 
 proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
-    fileloggerlvl: seq[Level] = @[lvlAll]): void =
+                   fileloggerlvl: seq[Level] = @[lvlAll], useconsolelogger: bool = true): void =
   log_channel.open()
   threadId = getThreadId()
   var logfile = fileName.replace(".log", "")
+  
+  writeToLogfile = usefilelogger
+  printToConsole = useconsolelogger
+
   if usefileLogger:
     if lvlInfo in fileloggerlvl:
       configureFileLogger(logfile & ".info" & ".log", levelThreshold = lvlInfo)
@@ -248,7 +256,7 @@ proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool 
 
     if lvlAll in fileloggerlvl:
       configureFileLogger(logfile & ".log", levelThreshold = lvlAll)
-
+  
   spawn collector()
   info("octolog started")
 
