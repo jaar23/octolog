@@ -1,16 +1,16 @@
 import colors, terminal, strutils, times
-import threadpool, locks, os
+import threadpool, os
 from logging import Filelogger, Level, newFileLogger, substituteLog, log, LevelNames
 
 
 var
-  runningLock: Lock
+  #runningLock: Lock
   logChannel: Channel[string]
   useStderr: bool = false
   printToConsole: bool = true
   writeToLogfile: bool = true
   threadId: int
-  isRunning {.guard: runningLock.}: bool = true
+  isRunning: bool = true
   infoFileLogger: FileLogger
   debugFileLogger: FileLogger
   errorFileLogger: FileLogger
@@ -90,8 +90,8 @@ proc disableFileLoggerLevel*(levelThreshold: Level) =
     enableFileLogger = false
 
 
-proc fmtLine(fmt: string = "[$datetime] [$levelname] $[$threadid] $appname : ", level: Level,
-    msgs: varargs[string, `$`]): string =
+proc fmtLine(fmt: string = "[$datetime] [$levelname] $[$threadid] $appname : ",
+    level: Level, msgs: varargs[string, `$`]): string =
   let
     color = ansiForegroundColorCode(LogColors[level])
     cdef = ansiForegroundColorCode(fgDefault)
@@ -172,12 +172,9 @@ proc fatal(msg: string) =
   log2Channel(lvlFatal, msg)
 
 
-proc collector() {.thread.} =
+proc collector(fmt: string = "[$datetime] [$levelname] $[$threadid] $appname : ") {.thread.} =
   try:
-    var running = true
-    withLock runningLock:
-      running = isRunning
-    while running:
+    while isRunning:
       let data = logChannel.recv()
       let tempMsg = data.split("|@|")
       if tempMsg.len < 2:
@@ -200,7 +197,7 @@ proc collector() {.thread.} =
           level = lvlNotice
         else:
           level = lvlNone
-      let line = fmtLine(level=level, msgs=msg)
+      let line = fmtLine(fmt = fmt, level = level, msgs = msg)
       if printToConsole:
         if useStderr:
           stderr.writeLine line
@@ -209,8 +206,6 @@ proc collector() {.thread.} =
       if writeToLogfile:
         {.cast(gcsafe).}:
           log2File(line)
-      withLock runningLock:
-        running = isRunning
   except:
     let line = fmtLine(level = lvlInfo, msgs = getCurrentExceptionMsg())
     stdout.writeLine line
@@ -224,11 +219,13 @@ proc collector() {.thread.} =
 
 
 proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
-                   fileloggerlvl: seq[Level] = @[lvlAll], useconsolelogger: bool = true): void =
+                   fileloggerlvl: seq[Level] = @[lvlAll],
+                   useconsolelogger: bool = true,
+                   skipInitLog = false, fmt = "[$datetime] [$levelname] $[$threadid] $appname : "): void =
   log_channel.open()
   threadId = getThreadId()
   var logfile = fileName.replace(".log", "")
-  
+
   writeToLogfile = usefilelogger
   printToConsole = useconsolelogger
 
@@ -256,20 +253,25 @@ proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool 
 
     if lvlAll in fileloggerlvl:
       configureFileLogger(logfile & ".log", levelThreshold = lvlAll)
-  
-  spawn collector()
-  info("octolog started")
+
+  spawn collector(fmt)
+  if not skipInitLog:
+    info("octolog started")
 
 
-proc octologStop*(): void =
+proc octologStop*(skipEndLog = false): void =
   # grace period before shutting down
   sleep(1000)
-  withLock runningLock:
-    isRunning = false
-  while logChannel.peek() == 0:
-    logChannel.close()
-  let line = fmtLine(level = lvlInfo, msgs = "octolog stopped")
-  stdout.writeLine line
+  if logChannel.peek() > 0:
+    let line = fmtLine(level = lvlInfo, msgs = "write pending log before exit octolog")
+    stdout.writeLine line
+  while true:
+    if logChannel.peek() == 0:
+      break
+  isRunning = false
+  if not skipEndLog:
+    let line = fmtLine(level = lvlInfo, msgs = "octolog stopped")
+    stdout.writeLine line
 
 
 template info*(msg: string) =
