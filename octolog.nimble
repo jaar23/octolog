@@ -3,7 +3,7 @@
 version       = "0.1.1"
 author        = "jaar23"
 description   = "wrapped std logging library via channel for multi-threaded application"
-license       = "GPL"
+license       = "GPL-3.0-or-later"
 srcDir        = "src"
 
 
