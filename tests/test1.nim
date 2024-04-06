@@ -18,8 +18,8 @@ test "log test":
   error "hello octolog!"
   notice "hello octolog!"
   fatal "hello octolog!"
-  octolog_stop()
   sleep(2000)
+  octolog_stop()
 
 
 test "log test all level":
@@ -32,10 +32,23 @@ test "log test all level":
   fatal "fatal fatal!!"
   notice "notice here!!"
   octolog_stop()
-  sleep(2000)
 
 
 test "disable filelogger":
   octolog_start(usefilelogger=false)
   info "hello world!!"
   octolog_stop()
+
+test "log rolling test":
+  octolog_start(fileRolling=true, maxLines=4)
+  info("hello octolog~")
+  info "hello octolog!"
+  debug "hello octolog!"
+  warn "hello octolog!"
+  error "hello octolog!"
+  notice "hello octolog!"
+  fatal "hello octolog!"
+  sleep(2000)
+  octolog_stop()
+
+

@@ -1,16 +1,55 @@
+## octolog is a logging library built on top of `std/logging` for multi-threaded logging, it is used `channels` to queue log message between different thread, then write to file or stdout.
+##
+## `start` proc is required to initialize octolog, underneath it will spawn a single thread to listen for log message, then write it to file / stdout / stderr.
+## 
+## .. note::
+##    you should activate thread support when using this library, include `--threads:on` in config.nims or build command
+##
+## ## Basic usage
+##
+## A simple example on how to use library.
+##
+## ```nim
+## import octolog, os
+##
+## # start octolog
+## octologStart()
+##
+## info "hello octolog!"
+## debug "hello octolog!"
+## warn "hello octolog!"
+## error "hello octolog!"
+## notice "hello octolog!"
+## fatal "hello octolog!"
+##
+## # stop octolog
+## octologStop()
+## ```
+##
+## you are allow to use `info("some info")` or `info "some info"`.
+##
+## In this example, a log file with current datetime will be created, for example, `202404052020.log`, you can initialize `octologStart` with different configuration.
+##
+##
+
 import colors, terminal, strutils, times
-import threadpool, os
-from logging import Filelogger, Level, newFileLogger, substituteLog, log, LevelNames
+import malebolgia
+from logging import 
+  Filelogger, Level, newFileLogger, substituteLog, log, LevelNames, 
+  RollingFileLogger, newRollingFileLogger
 
 
 var
-  #runningLock: Lock
+  # Threading
+  threadMaster = createMaster()
   logChannel: Channel[string]
+  threadId: int
+  # configuration
   useStderr: bool = false
   printToConsole: bool = true
   writeToLogfile: bool = true
-  threadId: int
   isRunning: bool = true
+  # File Logger config
   infoFileLogger: FileLogger
   debugFileLogger: FileLogger
   errorFileLogger: FileLogger
@@ -25,34 +64,61 @@ var
   enableFatalFileLogger = false
   enableWarnFileLogger = false
   enableNoticeFileLogger = false
+  
 
 const LogColors: array[Level, Color] = [colWhiteSmoke, colWhiteSmoke,
     colLightBlue, colLimeGreen, colOrange, colOrangeRed, colRed, colWhite]
 
-proc configureFileLogger*(fileName: string, levelThreshold: Level) =
+
+proc configureFileLogger(fileName: string, levelThreshold: Level, fmt = "";
+                          rolling: bool = false; maxLines: Positive = 1000; bufSize: int = -1;) =
   if levelThreshold == lvlInfo:
-    infoFileLogger = newFileLogger(fileName, levelThreshold = lvlInfo,
-        flushThreshold = lvlInfo)
+    infoFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlInfo, 
+                                                      maxLines=maxLines, bufSize=bufSize, 
+                                                      fmtStr = fmt, flushThreshold = lvlInfo) 
+      else: newFileLogger(fileName, levelThreshold = lvlInfo, flushThreshold = lvlInfo, fmtStr = fmt)
     enableInfoFileLogger = true
   elif levelThreshold == lvlDebug:
-    debugFileLogger = newFileLogger(fileName, levelThreshold = lvlDebug,
-        flushThreshold = lvlDebug)
+    debugFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlDebug, 
+                                                       maxLines=maxLines, bufSize=bufSize, 
+                                                       fmtStr = fmt, flushThreshold = lvlDebug) 
+      else: newFileLogger(fileName, levelThreshold = lvlDebug, flushThreshold = lvlDebug, fmtStr = fmt)
     enableDebugFileLogger = true
   elif levelThreshold == lvlError:
-    errorFileLogger = newFileLogger(fileName, levelThreshold = lvlError,
-        flushThreshold = lvlError)
+    errorFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlError, 
+                                                       maxLines=maxLines, bufSize=bufSize, 
+                                                       fmtStr = fmt, flushThreshold = lvlError) 
+      else: newFileLogger(fileName, levelThreshold = lvlError, flushThreshold = lvlError, fmtStr = fmt)
     enableErrorFileLogger = true
   elif levelThreshold == lvlFatal:
-    fatalFileLogger = newFileLogger(fileName, levelThreshold = lvlError)
+    fatalFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlFatal, 
+                                                       maxLines=maxLines, bufSize=bufSize, 
+                                                       fmtStr = fmt, flushThreshold = lvlFatal) 
+      else: newFileLogger(fileName, levelThreshold = lvlFatal, flushThreshold = lvlFatal, fmtStr = fmt)
     enableFatalFileLogger = true
   elif levelThreshold == lvlNotice:
-    noticeFileLogger = newFileLogger(fileName, levelThreshold = lvlNotice)
+    noticeFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlNotice, 
+                                                        maxLines=maxLines, bufSize=bufSize, 
+                                                        fmtStr = fmt, flushThreshold = lvlNotice) 
+      else: newFileLogger(fileName, levelThreshold = lvlNotice, flushThreshold = lvlNotice, fmtStr = fmt)
     enableNoticeFileLogger = true
   elif levelThreshold == lvlWarn:
-    warnFileLogger = newFileLogger(fileName, levelThreshold = lvlWarn)
+    warnFileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlWarn, 
+                                                      maxLines=maxLines, bufSize=bufSize, 
+                                                      fmtStr = fmt, flushThreshold = lvlWarn) 
+      else: newFileLogger(fileName, levelThreshold = lvlWarn, flushThreshold = lvlWarn, fmtStr = fmt)
     enableWarnFileLogger = true
+  elif levelThreshold == lvlAll:
+    fileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlAll, 
+                                                  fmtStr = fmt,
+                                                  maxLines=maxLines, bufSize=bufSize) 
+      else: newFileLogger(fileName, levelThreshold = lvlAll, fmtStr = fmt)
+    enableFileLogger = true
   else:
-    fileLogger = newFileLogger(fileName, levelThreshold = lvlAll)
+    fileLogger = if rolling: newRollingFileLogger(fileName, levelThreshold = lvlNone, 
+                                                  fmtStr = fmt,
+                                                  maxLines=maxLines, bufSize=bufSize) 
+      else: newFileLogger(fileName, levelThreshold = lvlNone, fmtStr = fmt)
     enableFileLogger = true
 
 
@@ -138,14 +204,18 @@ proc log2File(msg: string): void =
 
 
 
-proc log2Channel*(level: Level, msg: string) =
+proc log2Channel(level: Level, msg: string) =
   let line = LevelNames[level] & "|@|" & msg
   let sent = logChannel.trySend(line)
   if not sent:
-    echo "not sent"
+    let line = fmtLine(level = lvlInfo, msgs = "octolog unable to queue log message.")
+    stdout.writeLine line
 
 
-proc olog*(level: Level, msg: string) =
+proc octolog*(level: Level, msg: string) =
+  ## **Example**
+  ## .. code-block::
+  ##   octolog(lvlInfo, "hello, there...")
   log2Channel(level, msg)
 
 proc info(msg: string) =
@@ -218,11 +288,55 @@ proc collector(fmt: string = "[$datetime] [$levelname] $[$threadid] $appname : "
       log2File(line)
 
 
-proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool = true,
-                   fileloggerlvl: seq[Level] = @[lvlAll],
-                   useconsolelogger: bool = true,
-                   skipInitLog = false, fmt = "[$datetime] [$levelname] $[$threadid] $appname : "): void =
-  log_channel.open()
+proc octologStart*(fileName = now().format("yyyyMMddHHmm"); 
+                   useFileLogger = true;
+                   fileLoggerLvl: seq[Level] = @[lvlNone];
+                   useConsoleLogger = true;
+                   skipInitLog = false; 
+                   fileRolling = false;
+                   maxLines = 1000;
+                   bufSize = -1;
+                   fmt = "[$datetime] [$levelname] $[$threadid] $appname : "): void =
+  ## Start octolog thread with default configuration in background. 
+  ## 
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   octologStart()
+  ##
+  ## Start octolog thread without using file logger.
+  ##
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   octologStart(useFileLogger=false)
+  ## 
+  ## Start octolog thread using rolling file logger.
+  ##
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   octologStart(fileRolling=true)
+  ## Start octolog thread with a different log format. Default format is \"\[$datetime\] \[$levelname\] \[$threadid\] \$appname : \"
+  ## 
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   octologStart(fmt="[$datetime] [$levelname]: ")
+  ##
+  ## Start octolog thread with logging different log level file.
+  ##
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   octologStart(fileLoggerLvl=@[lvlInfo, lvlDebug, lvlError])
+  ##
+  logChannel.open()
   threadId = getThreadId()
   var logfile = fileName.replace(".log", "")
 
@@ -231,50 +345,67 @@ proc octologStart*(fileName = now().format("yyyyMMddHHmm"), usefilelogger: bool 
 
   if usefileLogger:
     if lvlInfo in fileloggerlvl:
-      configureFileLogger(logfile & ".info" & ".log", levelThreshold = lvlInfo)
+      configureFileLogger(logfile & ".info" & ".log", levelThreshold = lvlInfo, 
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
     if lvlDebug in fileloggerlvl:
-      configureFileLogger(logfile & ".debug" & ".log", levelThreshold = lvlAll)
+      configureFileLogger(logfile & ".debug" & ".log", levelThreshold = lvlAll,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
     if lvlError in fileloggerlvl:
-      configureFileLogger(logfile & ".error" & ".log",
-          levelThreshold = lvlError)
+      configureFileLogger(logfile & ".error" & ".log", levelThreshold = lvlError,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
     if lvlFatal in fileloggerlvl:
-      configureFileLogger(logfile & ".fatal" & ".log",
-          levelThreshold = lvlFatal)
+      configureFileLogger(logfile & ".fatal" & ".log", levelThreshold = lvlFatal,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
     if lvlNotice in fileloggerlvl:
-      configureFileLogger(logfile & ".notice" & ".log",
-          levelThreshold = lvlNotice)
+      configureFileLogger(logfile & ".notice" & ".log", levelThreshold = lvlNotice,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
     if lvlWarn in fileloggerlvl:
-      configureFileLogger(logfile & ".warn" & ".log", levelThreshold = lvlWarn)
+      configureFileLogger(logfile & ".warn" & ".log", levelThreshold = lvlWarn,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
-    if lvlAll in fileloggerlvl:
-      configureFileLogger(logfile & ".log", levelThreshold = lvlAll)
+    if lvlAll in fileloggerlvl or lvlNone in fileloggerlvl:
+      configureFileLogger(logfile & ".log", levelThreshold = lvlAll,
+                          rolling = fileRolling, maxLines = maxLines, bufSize = bufSize)
 
-  spawn collector(fmt)
+  threadMaster.spawn collector(fmt)
   if not skipInitLog:
-    info("octolog started")
+    let line = fmtLine(level = lvlInfo, msgs = "octolog started")
+    stdout.write line
 
 
 proc octologStop*(skipEndLog = false): void =
+  ## When stopping octolog thread, it will wait for all the log message clear in the channel before exit.
+  ## If there are too many message inside it, it may take some time before it is really exiting it.
   # grace period before shutting down
-  sleep(1000)
   if logChannel.peek() > 0:
     let line = fmtLine(level = lvlInfo, msgs = "write pending log before exit octolog")
     stdout.writeLine line
-  while true:
+  while logChannel.peek() > 0:
     if logChannel.peek() == 0:
+      logChannel.close()
       break
   isRunning = false
   if not skipEndLog:
-    let line = fmtLine(level = lvlInfo, msgs = "octolog stopped")
+    let line = fmtLine(level = lvlInfo, msgs = "octolog stopped!")
     stdout.writeLine line
+  threadMaster.cancel()
 
 
 template info*(msg: string) =
+  ## 
+  ## Logging your message with template style.
+  ## 
+  ## **Example:**
+  ##
+  ##
+  ## .. code-block::
+  ##   info "hello, there..."
+  ## 
   info(msg)
 
 
@@ -285,11 +416,14 @@ template debug*(msg: string) =
 template warn*(msg: string) =
   warn(msg)
 
+
 template error*(msg: string) =
   error(msg)
 
+
 template notice*(msg: string) =
   notice(msg)
+
 
 template fatal*(msg: string) =
   fatal(msg)

@@ -1,6 +1,6 @@
 # octolog
 
-octolog is a logging library built on top of `std/logging` for multi-threaded logging, it is used `Channel` to queue log message between different thread. 
+octolog is a logging library built on top of `std/logging` for multi-threaded logging, it is used `Channel` to queue log message between different thread, then write to file or stdout.
 
 `start` proc is required to initialize octolog, underneath it will spawn a single thread to listen for log message, then write it to file / stdout / stderr.
 
@@ -47,6 +47,8 @@ octologStop()
 
 you are allow to use `info("some info")` or `info "some info"`.
 
+In this example, a log file with current datetime will be created, for example, 202404052020.log, you can pass in different configuration to initialize octolog to achieve what you want.
+
 example output 
 ```text
 [2023-09-03T21:15:03] [INFO] test1:octolog started
@@ -61,7 +63,7 @@ example output
 
 ### Filelogger
 
-octolog used std filelogger to do file logging, as octolog only running in single thread, it is thread safe for using std/logging here. `start` proc have default `FileLogger` configure for all level. You can modify the behavior like below:
+octolog used std filelogger for file logging, as octolog only running in single thread, it is thread safe for using std/logging here. `start` proc have default `FileLogger` configure for all level. You can modify the behavior like below:
 
 
 ```nim
@@ -105,4 +107,19 @@ octologStart(fileName="octolog", fileloggerlvl=logLevel)
 
 ### RollingFileLogger
 
-Work in progress...
+logging file is going to grow. octolog also used `RollingFileLogger` to automatic archive and continue logging on a new file.
+
+```nim
+import octolog
+
+# start octolog with filerolling  enabled 
+# and number of lines should kept before archive the log file
+octolog_start(fileRolling=true, maxLines=4)
+
+info("hello octolog~")
+info "hello octolog!"
+
+octolog_stop()
+```
+
+
