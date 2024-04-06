@@ -24,6 +24,8 @@ cd octolog && nimble install
 
 ```
 
+Documentation: [octolog](https://jaar23.github.io/octolog/)
+
 ### Getting started
 
 A simple example on how to use library.
