@@ -15,7 +15,13 @@ octolog is a logging library built on top of `std/logging` for multi-threaded lo
 
 ### Install
 
-octolog is not publised to nimble yet. the best way to install now is via github.
+octolog is published on nimble, you can install it via:
+
+```shell
+nimble install octolog
+```
+
+or from github
 
 ```shell
 git clone https://github.com/jaar23/octolog.git
